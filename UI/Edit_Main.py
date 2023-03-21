@@ -9,11 +9,13 @@
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt5.QtWidgets import QWidget, QMainWindow
+from PyQt5.QtWidgets import QWidget, QMainWindow, QGraphicsView
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QTimer, QRect
 import XYBDeepLearn
 import torch as tr
+
+import XYBQt
 
 
 def circle_random(cx, cy, theta, r):
@@ -28,12 +30,8 @@ def circle_random(cx, cy, theta, r):
 class Ui_MainWindow(object):
     time_loop = QTimer()
     model = XYBDeepLearn.XYBDeepLearning()
-    w_RandomPointView = None
-    w_CossLineView = None
-    item_CossLineView = None
-    item_NeuronShow = None
-    loop_num = []
-    calculate_coss = []
+    qt_graph = XYBQt.XYBQtGraphLayoutWidget()
+    app = pg.mkQApp('Test Window')
 
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -94,61 +92,36 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
-        app = pg.mkQApp('Test Window')
-        view = pg.GraphicsLayoutWidget()
-        self.W_Graph.addTab(view, 'RandomPoint')
-
-        self.w_RandomPointView = view.addPlot(title='Random Point')
-        self.w_CossLineView = view.addPlot(title='Coss')
+        self.qt_graph = XYBQt.XYBQtGraphLayoutWidget()
+        self.W_Graph.addTab(self.qt_graph.getWidget(), 'Window01')
+        view_point = self.qt_graph.addPlot('RandomPoint')
+        view_coss = self.qt_graph.addPlot('Coss')
 
         # Image 显示
-        self.item_NeuronShow = pg.ImageItem()
-        self.w_RandomPointView.addItem(self.item_NeuronShow)
+        view_point.addItem('ImageShow', 'ImageItem')
 
         # 数据显示
-        p = pg.ScatterPlotItem(size=5)
-        p_list = self.Init_Data()
-        p.addPoints(p_list)
-        self.w_RandomPointView.addItem(p)
+        view_point.addItem('ScatterPoint', 'ScatterPlotItem')
 
-        # 深度学习模型
-        self.model.add_neuron(neuron_num=50, activation='tan_h', neuron_type='input')
-        self.model.add_neuron(neuron_num=15, activation='tan_h', neuron_type='layer')
-        self.model.add_neuron(neuron_num=3, activation='tan_h', neuron_type='layer')
-        self.model.add_neuron(neuron_num=2, activation='softmax', neuron_type='output')
+        # Coss显示
+        view_coss.addItem('Plot', 'PlotDataItem')
 
-
-        #Coss显示
-        self.item_CossLineView = pg.PlotDataItem(self.loop_num, self.calculate_coss)
-        self.w_CossLineView.addItem(self.item_CossLineView)
-        # self.w_CossLineView.setYRange(0, 1)
-        # self.w_CossLineView.setXRange(0, 1)
-
+        self.Func_Reset()
         self.W_Start.clicked.connect(self.Func_Start)
         self.W_Stop.clicked.connect(self.Func_Stop)
         self.W_Reset.clicked.connect(self.Func_Reset)
         self.time_loop.timeout.connect(self.Func_Loop)
 
-    def Init_Data(self):
-        res_render = []
-        for i in range(0, 100):
-            pos = circle_random(0.5, 0.5, np.random.uniform(0.0, 360.0), 0.2)
-            res_render.append({'pos': pos, 'brush': pg.mkBrush(color=(0, 255, 0, 255))})
-            self.model.add_data(tr.tensor([[float(pos[0])], [float(pos[1])]]), tr.tensor([[0.0], [1.0]]))
-
-            pos = circle_random(0.5, 0.5, np.random.uniform(0.0, 360.0), 1.0)
-            res_render.append({'pos': pos, 'brush': pg.mkBrush(color=(255, 0, 0, 255))})
-            self.model.add_data(tr.tensor([[float(pos[0])], [float(pos[1])]]), tr.tensor([[1.0], [0.0]]))
-        return res_render
-
     time_count = 0
+    loop_num = []
+    calculate_coss = []
 
     def Func_Loop(self):
         self.time_count += 1
         coss = self.model.train(learn=0.01, mountain=0.1, mini_batch=100, decay_rate=0.01)
-        self.loop_num.append(self.time_count / 1000.0)
+        self.loop_num.append(self.time_count)
         self.calculate_coss.append(coss.data.cpu().numpy())
-        self.item_CossLineView.setData(self.loop_num, self.calculate_coss)
+        self.qt_graph.getPlot('Coss').getItem('Plot').setData(self.loop_num, self.calculate_coss)
 
         # Image显示
         res = self.model.get_result(self.data_y)
@@ -158,11 +131,11 @@ class Ui_MainWindow(object):
         img_data_a = tr.ones(self.img_size, self.img_size, 1)
         img_data = tr.cat([img_data_r, img_data_g, img_data_b, img_data_a], dim=2)
         img_data = img_data.data.numpy() * 255
-        self.item_NeuronShow.setImage(img_data)
-        self.item_NeuronShow.setRect(QRect(-1, -1, 2, 2))
+        self.qt_graph.getPlot('RandomPoint').getItem('ImageShow').setImage(img_data)
+        self.qt_graph.getPlot('RandomPoint').getItem('ImageShow').setRect(QRect(-1, -1, 2, 2))
 
     data_y = []
-    img_size = 1024
+    img_size = 128
     img_width = 2
     img_start = [-1.0, -1.0]
 
@@ -175,18 +148,39 @@ class Ui_MainWindow(object):
                 y = self.img_start[1] + j * one_step - one_step * 0.5
                 self.data_y.append(tr.tensor([[float(x)], [float(y)]]))
         self.data_y = tr.cat(self.data_y, dim=1)
-        print(self.data_y)
         self.time_loop.start(24)
+        print('Start')
 
     def Func_Stop(self):
         self.time_loop.stop()
         print('Stop')
 
     def Func_Reset(self):
-        a = tr.tensor([[0.0, 1.0, 2.0],
-                       [1.0, 1.0, 1.0]])
-        c = self.model.get_result(a)
-        print(c)
+        self.loop_num = []
+        self.calculate_coss = []
+        # 深度学习模型实例化
+        self.model = XYBDeepLearn.XYBDeepLearning()
+
+        # 初始化点数据
+        res_render = []
+        for i in range(0, 100):
+            pos = circle_random(0.5, 0.5, np.random.uniform(0.0, 360.0), 0.2)
+            res_render.append({'pos': pos, 'brush': pg.mkBrush(color=(0, 255, 0, 255))})
+            self.model.add_data(tr.tensor([[float(pos[0])], [float(pos[1])]]), tr.tensor([[0.0], [1.0]]))
+
+            pos = circle_random(0.5, 0.5, np.random.uniform(0.0, 360.0), 1.0)
+            res_render.append({'pos': pos, 'brush': pg.mkBrush(color=(255, 0, 0, 255))})
+            self.model.add_data(tr.tensor([[float(pos[0])], [float(pos[1])]]), tr.tensor([[1.0], [0.0]]))
+            
+        self.qt_graph.getPlot('RandomPoint').getItem('ScatterPoint').setData(res_render)
+        print(self.qt_graph.getPlot('RandomPoint').getItem('ScatterPoint'))
+
+        # 神经元申明
+        self.model.add_neuron(neuron_num=50, activation='tan_h', neuron_type='input')
+        self.model.add_neuron(neuron_num=15, activation='tan_h', neuron_type='layer')
+        self.model.add_neuron(neuron_num=3, activation='tan_h', neuron_type='layer')
+        self.model.add_neuron(neuron_num=2, activation='softmax', neuron_type='output')
+        print('Reset Data')
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
