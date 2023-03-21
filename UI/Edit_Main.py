@@ -171,7 +171,7 @@ class Ui_MainWindow(object):
             pos = circle_random(0.5, 0.5, np.random.uniform(0.0, 360.0), 1.0)
             res_render.append({'pos': pos, 'brush': pg.mkBrush(color=(255, 0, 0, 255))})
             self.model.add_data(tr.tensor([[float(pos[0])], [float(pos[1])]]), tr.tensor([[1.0], [0.0]]))
-            
+
         self.qt_graph.getPlot('RandomPoint').getItem('ScatterPoint').setData(res_render)
         print(self.qt_graph.getPlot('RandomPoint').getItem('ScatterPoint'))
 
